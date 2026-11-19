@@ -1276,7 +1276,13 @@ function changedRange(before, after) {
       && before[before.length - 1 - suffix] === after[after.length - 1 - suffix]) {
     suffix++;
   }
-  return {before: [prefix, before.length - suffix], after: [prefix, after.length - suffix]};
+  // Widen to whole words, like GitHub, so a renamed identifier highlights completely.
+  var start = prefix;
+  while (start > 0 && /\w/.test(before[start - 1])) start--;
+  var end = before.length - suffix;
+  while (end < before.length && /\w/.test(before[end])) end++;
+  var trailing = before.length - end;
+  return {before: [start, end], after: [start, after.length - trailing]};
 }
 
 function markWordChanges(rows) {

@@ -130,7 +130,9 @@ test('paired changed lines highlight only the words that differ', () => {
 
 test('wholly rewritten lines get no word highlight', () => {
   assert.deepEqual(JSON.parse(JSON.stringify(context.changedRange('abc', 'abd'))),
-    { before: [2, 3], after: [2, 3] });
+    { before: [0, 3], after: [0, 3] });
+  assert.deepEqual(JSON.parse(JSON.stringify(context.changedRange('use(response);', 'use(postResponse);'))),
+    { before: [4, 12], after: [4, 16] });
   const rendered = context.renderDiff(diff, files);
   assert.doesNotMatch(rendered, /class="diff-word"/);
 });
