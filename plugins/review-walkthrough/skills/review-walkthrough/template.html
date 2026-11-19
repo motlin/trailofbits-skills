@@ -51,6 +51,16 @@
   }
 
   .header-top h1 { font-size: 16px; font-weight: 600; }
+  .pr-link {
+    color: var(--accent);
+    font-size: 13px;
+    text-decoration: none;
+    white-space: nowrap;
+    margin: 0 auto 0 12px;
+  }
+
+  .pr-link:hover { text-decoration: underline; }
+
   .step-counter { font-size: 13px; color: var(--text-muted); font-weight: 500; }
 
   .progress-bar { display: flex; gap: 4px; height: 4px; }
@@ -854,6 +864,7 @@
 <header>
   <div class="header-top">
     <h1>TITLE_PLACEHOLDER</h1>
+    <a class="pr-link" id="prLink" target="_blank" rel="noopener noreferrer" hidden></a>
     <span class="step-counter" id="stepCounter"></span>
   </div>
   <div class="progress-bar" id="progressBar"></div>
@@ -925,6 +936,13 @@ let commentFormEl = null;
 // Pending comments and the review summary exist only in this page, so a reload used to discard
 // them. Keep a draft in localStorage, keyed by a hash of the review's steps and PR, so reloading
 // or re-rendering the same review restores it and a different review never inherits it.
+function pullRequestUrl(meta) {
+  // The renderer validates owner, repo, and number, so they are safe in a URL path.
+  if (!meta) return null;
+  return 'https://github.com/' + encodeURIComponent(meta.owner) + '/' + encodeURIComponent(meta.repo)
+    + '/pull/' + Number(meta.pr_number);
+}
+
 const DRAFT_STORAGE_PREFIX = 'review-walkthrough-draft:';
 
 function hashString(text) {
@@ -2313,6 +2331,10 @@ if (PR_META) {
   document.getElementById('diffPane').classList.add('commenting-enabled');
   document.getElementById('topTabComments').style.display = '';
   loadReviewDraft();
+  var prLink = document.getElementById('prLink');
+  prLink.href = pullRequestUrl(PR_META);
+  prLink.textContent = PR_META.owner + '/' + PR_META.repo + '#' + PR_META.pr_number;
+  prLink.hidden = false;
 }
 
 render();

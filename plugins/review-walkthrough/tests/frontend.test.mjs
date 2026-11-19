@@ -166,3 +166,8 @@ test('restored drafts drop comments that no longer fit the review', () => {
   assert.deepEqual(JSON.parse(JSON.stringify(restored)), [valid]);
   assert.deepEqual(JSON.parse(JSON.stringify(context.restorableComments('nope', data.STEPS))), []);
 });
+
+test('pull request metadata links to the pull request on GitHub', () => {
+  assert.equal(context.pullRequestUrl(data.PR_META), 'https://github.com/example/repo/pull/306');
+  assert.equal(context.pullRequestUrl(null), null);
+});

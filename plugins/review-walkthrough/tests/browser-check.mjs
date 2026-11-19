@@ -289,6 +289,14 @@ async function browserChecks() {
     action.value = 'COMMENT';
   });
 
+  check('the header links to the pull request', () => {
+    const link = document.getElementById('prLink');
+    equal(link.hidden, false);
+    equal(link.getAttribute('href'), 'https://github.com/example/repo/pull/306');
+    equal(link.textContent, 'example/repo#306');
+    equal(link.getAttribute('rel'), 'noopener noreferrer');
+  });
+
   check('sanitized fragments never execute after browser events', () => equal(window.testExecuted, false));
   const output = document.createElement('output');
   output.id = 'frontend-results';
