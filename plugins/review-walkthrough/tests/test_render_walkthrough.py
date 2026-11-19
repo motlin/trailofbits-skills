@@ -3,6 +3,7 @@
 import copy
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from html.parser import HTMLParser
@@ -18,8 +19,13 @@ renderer = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(renderer)
 
 
+# Fixture repositories must not inherit the developer's Git configuration: settings such as
+# core.autocrlf or diff.mnemonicPrefix change the captured patch the tests assert on.
+GIT_ENV = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+
+
 def git(repo, *args):
-    return subprocess.check_output(["git", "-C", str(repo), *args])
+    return subprocess.check_output(["git", "-C", str(repo), *args], env=GIT_ENV)
 
 
 @pytest.fixture
