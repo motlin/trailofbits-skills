@@ -72,54 +72,113 @@
     flex: 1;
     overflow-y: auto;
     border-right: 1px solid var(--border);
-    font-family: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
+    padding: 16px;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
     font-size: 12px;
     line-height: 20px;
   }
 
-  .diff-file { margin-bottom: 2px; }
-
-  .diff-file-header {
-    background: var(--bg-tertiary);
-    padding: 8px 16px;
-    font-weight: 600;
-    font-size: 12px;
-    color: var(--text-muted);
-    border-bottom: 1px solid var(--border);
-    border-top: 1px solid var(--border);
-    position: sticky;
-    top: 0;
-    z-index: 1;
+  /* Diffs mirror GitHub's dark unified view: one bordered box per file, two line-number columns,
+     tinted gutters and word-level highlights on changed line pairs. */
+  .diff-file {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 16px;
+    overflow: clip;
+    background: var(--bg);
   }
 
-  .diff-hunk-header {
-    background: var(--accent-dim);
-    color: var(--accent);
-    padding: 4px 16px;
-    font-size: 11px;
+  .diff-file-header {
+    background: var(--bg-secondary);
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    font-weight: 600;
+    color: var(--text);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: -16px;
+    z-index: 3;
+  }
+
+  .diff-file-path { overflow-wrap: anywhere; }
+  .diff-stat { font-weight: 400; white-space: nowrap; }
+  .diff-stat-add { color: var(--green); }
+  .diff-stat-del { color: var(--red); }
+  .diff-file-meta { flex-basis: 100%; font-weight: 400; color: var(--text-muted); }
+
+  .diff-hunk-header,
+  .diff-note {
+    display: flex;
+    background: rgba(56, 139, 253, 0.1);
+    color: var(--text-muted);
+  }
+
+  .diff-note { background: var(--bg); font-style: italic; }
+
+  .diff-hunk-header .hunk-gutter,
+  .diff-note .hunk-gutter {
+    width: 100px;
+    flex-shrink: 0;
+    background: rgba(56, 139, 253, 0.15);
+  }
+
+  .diff-note .hunk-gutter { background: transparent; }
+
+  .diff-hunk-header .hunk-text,
+  .diff-note .hunk-text {
+    padding: 0 10px 0 22px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 
   .diff-line {
-    padding: 0 16px;
-    white-space: pre-wrap;
-    word-break: break-all;
     display: flex;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    color: var(--text);
   }
 
-  .diff-line .line-num {
-    color: var(--line-num);
-    min-width: 50px;
-    text-align: right;
-    padding-right: 16px;
-    user-select: none;
+  .diff-line .line-num,
+  .diff-line .line-num-old {
+    width: 50px;
     flex-shrink: 0;
+    padding: 0 10px;
+    text-align: right;
+    color: #6e7681;
+    user-select: none;
     position: relative;
   }
 
-  .diff-line .line-content { flex: 1; min-width: 0; }
-  .diff-line.addition { background: var(--green-bg); color: var(--green); }
-  .diff-line.deletion { background: var(--red-bg); color: var(--red); }
-  .diff-line.context { color: var(--text-muted); }
+  .diff-line .diff-sign {
+    width: 22px;
+    flex-shrink: 0;
+    text-align: center;
+    user-select: none;
+  }
+
+  .diff-line .line-content { flex: 1; min-width: 0; padding-right: 10px; }
+
+  .diff-line.addition { background: rgba(46, 160, 67, 0.15); }
+  .diff-line.addition .line-num,
+  .diff-line.addition .line-num-old { background: rgba(63, 185, 80, 0.3); color: var(--text); }
+  .diff-line.deletion { background: rgba(248, 81, 73, 0.1); }
+  .diff-line.deletion .line-num,
+  .diff-line.deletion .line-num-old { background: rgba(248, 81, 73, 0.3); color: var(--text); }
+  .diff-line.addition .diff-word { background: rgba(46, 160, 67, 0.4); border-radius: 2px; }
+  .diff-line.deletion .diff-word { background: rgba(248, 81, 73, 0.4); border-radius: 2px; }
+
+  .tok-kw { color: #ff7b72; }
+  .tok-str { color: #a5d6ff; }
+  .tok-com { color: #8b949e; }
+  .tok-num { color: #79c0ff; }
+  .tok-type { color: #ffa657; }
+  .tok-fn { color: #d2a8ff; }
+  .tok-ann { color: #d2a8ff; }
+  .tok-tag { color: #7ee787; }
+  .tok-attr { color: #79c0ff; }
 
   /* Line commenting — + button */
   .line-add-btn {
@@ -160,7 +219,8 @@
   .diff-line.selected {
     background: rgba(31, 111, 235, 0.15) !important;
   }
-  .diff-line.selected .line-content { color: var(--text) !important; }
+  .diff-line.selected .line-num,
+  .diff-line.selected .line-num-old { background: rgba(31, 111, 235, 0.3); }
 
   /* Comment marker for lines with pending comments */
   .diff-line.has-comment .line-num::after {
@@ -862,6 +922,7 @@ let pendingComments = [];
 let selectionStart = null; // {el, file, line, side}
 let commentFormEl = null;
 
+
 function escape(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -905,76 +966,380 @@ function sanitizeFragment(html) {
   return result.innerHTML;
 }
 
+// Syntax highlighting for diff lines. Each side of a hunk carries its own lexer state, so block
+// comments, Java text blocks and XML tags that span lines stay colored across them.
+function hlWords(s) {
+  var words = Object.create(null);
+  s.split(' ').forEach(function(w) { words[w] = true; });
+  return words;
+}
+
+var HL_JAVA_WORDS = 'abstract assert boolean break byte case catch char class const continue default do double'
+  + ' else enum extends final finally float for goto if implements import instanceof int interface long native'
+  + ' new package permits private protected public record return sealed short static strictfp super switch'
+  + ' synchronized this throw throws transient try var void volatile while yield true false null';
+
+var HL_LANGS = {
+  java: {kind: 'code', line: '//', block: true, textBlock: true, annotations: true, types: true,
+    words: hlWords(HL_JAVA_WORDS)},
+  groovy: {kind: 'code', line: '//', block: true, textBlock: true, annotations: true, types: true,
+    words: hlWords(HL_JAVA_WORDS + ' def in as trait it')},
+  kotlin: {kind: 'code', line: '//', block: true, textBlock: true, annotations: true, types: true,
+    words: hlWords('as break class continue do else false for fun if in interface is null object package'
+      + ' return super this throw true try typealias val var when while by catch constructor data enum'
+      + ' finally import init internal open override private protected public sealed companion')},
+  ts: {kind: 'code', line: '//', block: true, backtick: true, annotations: true, types: true,
+    words: hlWords('abstract as async await break case catch class const continue debugger default delete do'
+      + ' else enum export extends false finally for from function if implements import in instanceof'
+      + ' interface let new null of private protected public readonly return static super switch this throw'
+      + ' true try type typeof undefined var void while yield')},
+  klass: {kind: 'code', line: '//', block: true, types: true,
+    words: hlWords('package class interface enumeration association projection service on relationship'
+      + ' multiplicity criteria orderBy ascending descending authorize validate conflict version'
+      + ' GET POST PUT PATCH DELETE key id userId audit valid system temporal temporalRange temporalInstant'
+      + ' transient abstract inherits implements extends final private owned derived native this'
+      + ' createdBy createdOn lastUpdatedBy systemFrom systemTo validFrom validTo optimisticallyLocked'
+      + ' digest digested objectStorage table-per-class table-per-subclass table-for-all-subclasses'
+      + ' count one many true false null')},
+  json: {kind: 'code', line: '//', block: true, jsonKeys: true, words: hlWords('true false null')},
+  yaml: {kind: 'code', line: '#', yamlKeys: true, wordRe: /^[\w$][\w$.\-]*/,
+    words: hlWords('true false null yes no on off')},
+  sql: {kind: 'code', line: '--', block: true, caseInsensitive: true,
+    words: hlWords('select from where create table view as join left right inner outer on and or not null'
+      + ' primary key foreign references insert into values update delete group by order having count case'
+      + ' when then else end exists in is alter add constraint index unique default varchar char int'
+      + ' integer bigint smallint boolean timestamp date double float decimal numeric text drop set distinct'
+      + ' union all limit offset with cascade')},
+  sh: {kind: 'code', line: '#', words: hlWords('if then else elif fi for while until do done case esac in'
+    + ' function return export local readonly set unset shift exit')},
+  py: {kind: 'code', line: '#', annotations: true, types: true,
+    words: hlWords('and as assert async await break class continue def del elif else except finally for'
+      + ' from global if import in is lambda nonlocal not or pass raise return try while with yield'
+      + ' True False None')},
+  antlr: {kind: 'code', line: '//', block: true,
+    words: hlWords('grammar lexer parser fragment import options tokens channels mode returns locals'
+      + ' throws catch finally EOF skip channel pushMode popMode type more')},
+  xml: {kind: 'xml'},
+};
+
+var HL_EXTENSIONS = {
+  java: 'java', groovy: 'groovy', gradle: 'groovy', kt: 'kotlin', kts: 'kotlin',
+  ts: 'ts', tsx: 'ts', mts: 'ts', cts: 'ts', js: 'ts', jsx: 'ts', mjs: 'ts', cjs: 'ts',
+  klass: 'klass', json: 'json', json5: 'json', jsonc: 'json',
+  yaml: 'yaml', yml: 'yaml', sql: 'sql', ddl: 'sql', fk: 'sql', idx: 'sql',
+  sh: 'sh', bash: 'sh', zsh: 'sh', py: 'py', g4: 'antlr',
+  xml: 'xml', xsd: 'xml', html: 'xml', htm: 'xml', svg: 'xml',
+};
+
+function hlLanguage(path) {
+  // Velocity templates (Maven archetypes) are named after the file they generate, e.g. pom.xml.vm
+  var name = path.split('/').pop().replace(/\.vm$/, '');
+  var match = name.match(/\.([^.]+)$/);
+  return match ? HL_LANGS[HL_EXTENSIONS[match[1].toLowerCase()]] || null : null;
+}
+
+function hlState() {
+  return {comment: false, textBlock: false, tag: false};
+}
+
+function hlToken(kind, text) {
+  return [kind, text];
+}
+
+function hlCode(text, lang, state) {
+  var out = [];
+  var i = 0;
+  var n = text.length;
+  var wordRe = lang.wordRe || /^[A-Za-z_$][\w$]*/;
+  while (i < n) {
+    var rest = text.slice(i);
+    var match;
+    if (state.comment) {
+      var commentEnd = text.indexOf('*/', i);
+      var commentStop = commentEnd < 0 ? n : commentEnd + 2;
+      out.push(hlToken('com', text.slice(i, commentStop)));
+      state.comment = commentEnd < 0;
+      i = commentStop;
+    } else if (state.textBlock) {
+      var textEnd = text.indexOf('"""', i);
+      var textStop = textEnd < 0 ? n : textEnd + 3;
+      out.push(hlToken('str', text.slice(i, textStop)));
+      state.textBlock = textEnd < 0;
+      i = textStop;
+    } else if (lang.block && rest.startsWith('/*')) {
+      state.comment = true;
+      out.push(hlToken('com', '/*'));
+      i += 2;
+    } else if (lang.line && rest.startsWith(lang.line)
+        && (lang.line !== '#' || i === 0 || /\s/.test(text[i - 1]))) {
+      out.push(hlToken('com', rest));
+      i = n;
+    } else if (lang.textBlock && rest.startsWith('"""')) {
+      state.textBlock = true;
+      out.push(hlToken('str', '"""'));
+      i += 3;
+    } else if (text[i] === '"' || text[i] === "'" || (text[i] === '`' && lang.backtick)) {
+      var quote = text[i];
+      var j = i + 1;
+      while (j < n && text[j] !== quote) j += text[j] === '\\' ? 2 : 1;
+      j = Math.min(j + 1, n);
+      var isKey = (lang.jsonKeys || lang.yamlKeys) && /^\s*:/.test(text.slice(j));
+      out.push(hlToken(isKey ? 'attr' : 'str', text.slice(i, j)));
+      i = j;
+    } else if (lang.annotations && (match = rest.match(/^@[A-Za-z_][\w.]*/))) {
+      out.push(hlToken('ann', match[0]));
+      i += match[0].length;
+    } else if ((i === 0 || !/[\w$]/.test(text[i - 1]))
+        && (match = rest.match(/^(?:0[xX][\da-fA-F_]+|\d[\d_]*(?:\.\d[\d_]*)?(?:[eE][+-]?\d+)?)[lLfFdD]?\b/))) {
+      out.push(hlToken('num', match[0]));
+      i += match[0].length;
+    } else if ((match = rest.match(wordRe))) {
+      var word = match[0];
+      var after = text.slice(i + word.length);
+      var kind = null;
+      if ((lang.yamlKeys && /^\s*:(\s|$)/.test(after)) || (lang.jsonKeys && /^\s*:/.test(after))) {
+        kind = 'attr';
+      } else if (lang.words[lang.caseInsensitive ? word.toLowerCase() : word]) {
+        kind = 'kw';
+      } else if (lang.types && /^[A-Z]/.test(word) && /[a-z]/.test(word)) {
+        kind = 'type';
+      } else if (lang.kind === 'code' && /^\s*\(/.test(after)) {
+        kind = 'fn';
+      }
+      out.push(hlToken(kind, word));
+      i += word.length;
+    } else {
+      out.push([null, text[i]]);
+      i += 1;
+    }
+  }
+  return out;
+}
+
+function hlXml(text, state) {
+  var out = [];
+  var i = 0;
+  var n = text.length;
+  while (i < n) {
+    var rest = text.slice(i);
+    var match;
+    if (state.comment) {
+      var commentEnd = text.indexOf('-->', i);
+      var commentStop = commentEnd < 0 ? n : commentEnd + 3;
+      out.push(hlToken('com', text.slice(i, commentStop)));
+      state.comment = commentEnd < 0;
+      i = commentStop;
+    } else if (state.tag) {
+      if ((match = rest.match(/^[\/?]?>/))) {
+        out.push(hlToken('tag', match[0]));
+        state.tag = false;
+      } else if ((match = rest.match(/^"[^"]*"?|^'[^']*'?/))) {
+        out.push(hlToken('str', match[0]));
+      } else if ((match = rest.match(/^[\w:.\-]+/))) {
+        out.push(hlToken('attr', match[0]));
+      } else {
+        match = [text[i]];
+        out.push([null, text[i]]);
+      }
+      i += match[0].length;
+    } else if (rest.startsWith('<!--')) {
+      state.comment = true;
+      out.push(hlToken('com', '<!--'));
+      i += 4;
+    } else if ((match = rest.match(/^<[\/?!]?[\w:.\-]*/))) {
+      state.tag = true;
+      out.push(hlToken('tag', match[0]));
+      i += match[0].length;
+    } else {
+      var next = text.indexOf('<', i + 1);
+      var stop = next < 0 ? n : next;
+      out.push([null, text.slice(i, stop)]);
+      i = stop;
+    }
+  }
+  return out;
+}
+
+function hlLine(text, lang, state) {
+  return lang.kind === 'xml' ? hlXml(text, state) : hlCode(text, lang, state);
+}
+
+// Git header lines that GitHub folds into the file header instead of showing as diff rows.
+var DIFF_HIDDEN_META = /^(index |--- |\+\+\+ )/;
+
+function renderTokens(tokens, range) {
+  // range is [start, end) in characters of the line text; that span gets a word-change highlight.
+  var html = '';
+  var offset = 0;
+  tokens.forEach(function(token) {
+    var kind = token[0];
+    var text = token[1];
+    var pieces = [[0, text.length, false]];
+    if (range) {
+      var start = Math.max(range[0] - offset, 0);
+      var end = Math.min(range[1] - offset, text.length);
+      if (start < end) {
+        pieces = [[0, start, false], [start, end, true], [end, text.length, false]];
+      }
+    }
+    pieces.forEach(function(piece) {
+      if (piece[0] >= piece[1]) return;
+      var inner = escape(text.slice(piece[0], piece[1]));
+      if (kind) inner = '<span class="tok-' + kind + '">' + inner + '</span>';
+      html += piece[2] ? '<span class="diff-word">' + inner + '</span>' : inner;
+    });
+    offset += text.length;
+  });
+  return html;
+}
+
+function changedRange(before, after) {
+  // The differing middle of two lines after trimming their common prefix and suffix.
+  var prefix = 0;
+  var max = Math.min(before.length, after.length);
+  while (prefix < max && before[prefix] === after[prefix]) prefix++;
+  var suffix = 0;
+  while (suffix < max - prefix
+      && before[before.length - 1 - suffix] === after[after.length - 1 - suffix]) {
+    suffix++;
+  }
+  return {before: [prefix, before.length - suffix], after: [prefix, after.length - suffix]};
+}
+
+function markWordChanges(rows) {
+  // Pair each run of deleted lines with the run of added lines that follows it, line by line,
+  // and highlight what changed when the lines are mostly the same.
+  var i = 0;
+  while (i < rows.length) {
+    if (rows[i].cls !== 'deletion') { i++; continue; }
+    var delStart = i;
+    while (i < rows.length && rows[i].cls === 'deletion') i++;
+    var addStart = i;
+    while (i < rows.length && rows[i].cls === 'addition') i++;
+    var pairs = Math.min(addStart - delStart, i - addStart);
+    for (var k = 0; k < pairs; k++) {
+      var del = rows[delStart + k];
+      var add = rows[addStart + k];
+      var range = changedRange(del.text, add.text);
+      var changed = Math.max(range.before[1] - range.before[0], range.after[1] - range.after[0]);
+      var longest = Math.max(del.text.length, add.text.length);
+      if (longest > 0 && changed < longest * 0.6) {
+        del.range = range.before;
+        add.range = range.after;
+      }
+    }
+  }
+}
+
 function renderDiff(diffText, files) {
   var lines = diffText.split('\n');
   var html = '';
-  var currentFile = '';
   var fileIndex = 0;
-  var inHunk = false;
   var hunkIndex = 0;
-  var lineNumOld = 0, lineNumNew = 0;
+  var file = null;
+
+  function startFile() {
+    file = {path: files[fileIndex++], meta: [], rows: [], adds: 0, dels: 0,
+      lang: null, inHunk: false, oldNum: 0, newNum: 0, stateOld: hlState(), stateNew: hlState()};
+    file.lang = hlLanguage(file.path);
+  }
+
+  function finishFile() {
+    if (!file) return;
+    markWordChanges(file.rows);
+    html += '<div class="diff-file"><div class="diff-file-header">'
+      + '<span class="diff-file-path">' + escape(file.path) + '</span>'
+      + '<span class="diff-stat"><span class="diff-stat-add">+' + file.adds + '</span> '
+      + '<span class="diff-stat-del">−' + file.dels + '</span></span>';
+    if (file.meta.length) {
+      html += '<span class="diff-file-meta">' + file.meta.map(escape).join('<br>') + '</span>';
+    }
+    html += '</div>';
+    file.rows.forEach(function(row) {
+      if (row.cls === 'hunk' || row.cls === 'note') {
+        html += '<div class="' + (row.cls === 'hunk' ? 'diff-hunk-header' : 'diff-note') + '">'
+          + '<span class="hunk-gutter"></span><span class="hunk-text">' + escape(row.text)
+          + '</span></div>';
+        return;
+      }
+      html += '<div class="diff-line ' + row.cls + '"'
+        + ' data-file="' + escape(file.path) + '"'
+        + ' data-line="' + row.num + '"'
+        + ' data-old-line="' + row.oldNum + '"'
+        + ' data-new-line="' + row.newNum + '"'
+        + ' data-hunk="' + row.hunk + '"'
+        + ' data-side="' + row.side + '">'
+        + '<span class="line-num-old">' + row.oldNum + '</span>'
+        + '<span class="line-num">'
+        + '<button class="line-add-btn" title="Add review comment">+</button>'
+        + row.newNum + '</span>'
+        + '<span class="diff-sign">' + escape(row.sign) + '</span>'
+        + '<span class="line-content">' + renderTokens(row.tokens, row.range) + '</span></div>';
+    });
+    html += '</div>';
+    file = null;
+  }
 
   for (var i = 0; i < lines.length; i++) {
     var line = lines[i];
 
     if (line.startsWith('diff --git ')) {
-      if (currentFile) html += '</div>';
-      currentFile = files[fileIndex++];
-      inHunk = false;
-      html += '<div class="diff-file"><div class="diff-file-header">'
-        + escape(currentFile) + '</div>';
+      finishFile();
+      startFile();
       continue;
-    } else if (line.startsWith('@@')) {
+    }
+    if (!file) continue;
+
+    if (line.startsWith('@@')) {
       var m = line.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
       if (m) {
-        lineNumOld = parseInt(m[1]);
-        lineNumNew = parseInt(m[2]);
-        inHunk = true;
+        file.oldNum = parseInt(m[1]);
+        file.newNum = parseInt(m[2]);
+        file.inHunk = true;
         hunkIndex++;
-        html += '<div class="diff-hunk-header">'
-          + escape(line) + '</div>';
+        // A hunk can start inside a comment or text block; lexing restarts from code here.
+        file.stateOld = hlState();
+        file.stateNew = hlState();
+        file.rows.push({cls: 'hunk', text: line});
       }
       continue;
     }
 
-    if (!currentFile) continue;
-    if (!inHunk || !/^[ +\-]/.test(line)) {
-      if (line) html += '<div class="diff-hunk-header">' + escape(line) + '</div>';
+    if (!file.inHunk || !/^[ +\-]/.test(line)) {
+      if (!line) continue;
+      if (file.inHunk) file.rows.push({cls: 'note', text: line});
+      else if (!DIFF_HIDDEN_META.test(line)) file.meta.push(line);
       continue;
     }
 
-    var cls, num, side, oldNum = '', newNum = '';
-    if (line.startsWith('+')) {
-      cls = 'addition'; num = lineNumNew; side = 'RIGHT';
-      newNum = lineNumNew;
-      lineNumNew++;
-    } else if (line.startsWith('-')) {
-      cls = 'deletion'; num = lineNumOld; side = 'LEFT';
-      oldNum = lineNumOld;
-      lineNumOld++;
+    var sign = line[0];
+    var text = line.slice(1);
+    var row = {sign: sign, text: text, hunk: hunkIndex, oldNum: '', newNum: ''};
+    if (sign === '+') {
+      row.cls = 'addition'; row.num = file.newNum; row.side = 'RIGHT';
+      row.newNum = file.newNum++;
+      file.adds++;
+    } else if (sign === '-') {
+      row.cls = 'deletion'; row.num = file.oldNum; row.side = 'LEFT';
+      row.oldNum = file.oldNum++;
+      file.dels++;
     } else {
-      cls = 'context'; num = lineNumNew; side = 'RIGHT';
-      oldNum = lineNumOld;
-      newNum = lineNumNew;
-      lineNumOld++;
-      lineNumNew++;
+      row.cls = 'context'; row.num = file.newNum; row.side = 'RIGHT';
+      row.oldNum = file.oldNum++;
+      row.newNum = file.newNum++;
     }
-
-    html += '<div class="diff-line ' + cls + '"'
-      + ' data-file="' + escape(currentFile) + '"'
-      + ' data-line="' + num + '"'
-      + ' data-old-line="' + oldNum + '"'
-      + ' data-new-line="' + newNum + '"'
-      + ' data-hunk="' + hunkIndex + '"'
-      + ' data-side="' + side + '">'
-      + '<span class="line-num">'
-      + '<button class="line-add-btn" title="Add review comment">+</button>'
-      + num + '</span>'
-      + '<span class="line-content">'
-      + escape(line || ' ') + '</span></div>';
+    if (file.lang) {
+      // Deleted lines continue the old file's lexer state, added lines the new file's, and context both.
+      row.tokens = hlLine(text, file.lang, row.cls === 'deletion' ? file.stateOld : file.stateNew);
+      if (row.cls === 'context') file.stateOld = Object.assign({}, file.stateNew);
+    } else {
+      row.tokens = [[null, text]];
+    }
+    file.rows.push(row);
   }
+  finishFile();
 
-  return html + (currentFile ? '</div>' : '');
+  return html;
 }
 
 function lineOnSide(el, side) {

@@ -91,3 +91,56 @@ for (const shell of ['/bin/sh', '/bin/bash', '/bin/zsh']) {
     }
   });
 }
+
+const javaDiff = [
+  'diff --git a/A.java b/A.java',
+  'index 1111111..2222222 100644',
+  '--- a/A.java',
+  '+++ b/A.java',
+  '@@ -1,4 +1,4 @@',
+  ' /* opens',
+  '-   closes */ int count = 1;',
+  '+   closes */ long count = 1;',
+  ' @Override public String name() { return "a"; } // done',
+  '',
+].join('\n');
+
+test('code is syntax highlighted by file extension, with comment state carried across lines', () => {
+  const rendered = context.renderDiff(javaDiff, ['A.java']);
+  assert.match(rendered, /<span class="tok-com">\/\*<\/span><span class="tok-com"> opens<\/span>/);
+  assert.match(rendered, /<span class="tok-com">   closes \*\/<\/span> <span class="diff-word"><span class="tok-kw">int<\/span>/);
+  assert.match(rendered, /<span class="tok-ann">@Override<\/span> <span class="tok-kw">public<\/span>/);
+  assert.match(rendered, /<span class="tok-type">String<\/span> <span class="tok-fn">name<\/span>\(\)/);
+  assert.match(rendered, /<span class="tok-str">&quot;a&quot;<\/span>/);
+  assert.match(rendered, /<span class="tok-com">\/\/ done<\/span>/);
+  assert.match(rendered, /<span class="tok-num">1<\/span>/);
+});
+
+test('files without a known language render as plain text', () => {
+  const rendered = context.renderDiff(diff, files);
+  assert.doesNotMatch(rendered, /class="tok-/);
+});
+
+test('paired changed lines highlight only the words that differ', () => {
+  const rendered = context.renderDiff(javaDiff, ['A.java']);
+  assert.match(rendered, /<span class="diff-word"><span class="tok-kw">int<\/span><\/span>/);
+  assert.match(rendered, /<span class="diff-word"><span class="tok-kw">long<\/span><\/span>/);
+  assert.equal((rendered.match(/class="diff-word"/g) || []).length, 2);
+});
+
+test('wholly rewritten lines get no word highlight', () => {
+  assert.deepEqual(JSON.parse(JSON.stringify(context.changedRange('abc', 'abd'))),
+    { before: [2, 3], after: [2, 3] });
+  const rendered = context.renderDiff(diff, files);
+  assert.doesNotMatch(rendered, /class="diff-word"/);
+});
+
+test('file headers show change counts and keep mode and rename metadata but hide index and path lines', () => {
+  const rendered = context.renderDiff(diff, files);
+  assert.match(rendered, /both\.txt<\/span><span class="diff-stat"><span class="diff-stat-add">\+1<\/span> <span class="diff-stat-del">−1<\/span>/);
+  assert.match(rendered, /<span class="diff-file-meta">deleted file mode 100644<\/span>/);
+  assert.doesNotMatch(rendered, /index 1111111/);
+  assert.doesNotMatch(rendered, /\+\+\+ b\/both\.txt/);
+  assert.match(rendered, /<span class="line-num-old">1<\/span><span class="line-num">/);
+});
+

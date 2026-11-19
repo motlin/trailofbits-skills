@@ -68,7 +68,7 @@ async function browserChecks() {
     equal(document.querySelectorAll('#diffPane > .diff-file').length, 6);
     equal(document.querySelectorAll('#diffPane .diff-file .diff-file').length, 0);
     equal(document.querySelectorAll('#diffPane .diff-line').length, 6);
-    equal(Array.from(document.querySelectorAll('.diff-file-header')).map(el => el.textContent).join('\0'), STEPS[0].files.join('\0'));
+    equal(Array.from(document.querySelectorAll('.diff-file-header .diff-file-path')).map(el => el.textContent).join('\0'), STEPS[0].files.join('\0'));
     const gone = Array.from(document.querySelectorAll('.diff-line')).find(el => el.dataset.file === 'gone.txt');
     equal(gone.dataset.side, 'LEFT');
   });
