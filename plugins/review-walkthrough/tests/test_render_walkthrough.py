@@ -238,3 +238,66 @@ def test_rejects_malformed_patch_and_missing_template_slots(changed):
         renderer.split_diff("")
     with pytest.raises(ValueError, match="Template must contain"):
         renderer.render(data, patch, template="<html></html>")
+
+
+JAVA_BLOCK = (
+    "diff --git a/A.java b/A.java\n"
+    "index 1111111..2222222 100644\n"
+    "--- a/A.java\n"
+    "+++ b/A.java\n"
+    "@@ -1,4 +1,4 @@\n"
+    " /* opens\n"
+    "-   closes */ int count = 1;\n"
+    "+   closes */ long count = 1;\n"
+    ' @Override public String name() { return "a"; } // done\n'
+)
+
+
+def kinds(tokens, kind):
+    return [text for token_kind, text in tokens if token_kind == kind]
+
+
+def test_highlights_lex_each_hunk_side_as_a_block_in_github_color_classes():
+    rows = renderer.highlight_rows(JAVA_BLOCK, "A.java")
+    assert ["".join(text for _, text in row) for row in rows] == [
+        "/* opens",
+        "   closes */ int count = 1;",
+        "   closes */ long count = 1;",
+        ' @Override public String name() { return "a"; } // done'[1:],
+    ]
+    assert kinds(rows[1], "com") == ["   closes */"]
+    assert kinds(rows[1], "kw") == ["int"]
+    assert kinds(rows[2], "kw") == ["long"]
+    assert kinds(rows[3], "ann") == ["@Override"]
+    assert kinds(rows[3], "str") == ['"a"']
+    assert kinds(rows[3], "fn") == ["name"]
+    assert kinds(rows[3], "com") == ["// done"]
+
+
+@pytest.mark.parametrize(
+    ("path", "line", "kind", "text"),
+    [
+        ("model.klass", "class Question", "kw", "class"),
+        ("schema.ddl", "create table FOO (ID bigint);", "kw", "create"),
+        ("settings.jsonc", '{"key": 1} // note', "com", "// note"),
+        ("pom.xml.vm", "<version>${version}</version>", "tag", "<version>"),
+        ("Klass.g4", "grammar Klass;", "kw", "grammar"),
+    ],
+)
+def test_highlights_cover_aliases_and_the_klass_language(path, line, kind, text):
+    block = f"diff --git a/{path} b/{path}\n@@ -0,0 +1 @@\n+{line}\n"
+    (row,) = renderer.highlight_rows(block, path)
+    assert "".join(token_text for _, token_text in row) == line
+    assert text in kinds(row, kind)
+
+
+def test_files_without_a_lexer_have_no_highlights():
+    block = "diff --git a/notes.unknown b/notes.unknown\n@@ -0,0 +1 @@\n+plain\n"
+    assert renderer.highlight_rows(block, "notes.unknown") is None
+
+
+def test_normalized_steps_carry_highlights_for_each_file(changed):
+    patch, data = changed
+    result = renderer.normalize_data(data, patch)
+    for step in result["steps"]:
+        assert set(step["highlights"]) == set(step["files"])

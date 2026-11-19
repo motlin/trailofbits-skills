@@ -105,24 +105,34 @@ const javaDiff = [
   '',
 ].join('\n');
 
-test('code is syntax highlighted by file extension, with comment state carried across lines', () => {
-  const rendered = context.renderDiff(javaDiff, ['A.java']);
-  assert.match(rendered, /<span class="tok-com">\/\*<\/span><span class="tok-com"> opens<\/span>/);
-  assert.match(rendered, /<span class="tok-com">   closes \*\/<\/span> <span class="diff-word"><span class="tok-kw">int<\/span>/);
-  assert.match(rendered, /<span class="tok-ann">@Override<\/span> <span class="tok-kw">public<\/span>/);
-  assert.match(rendered, /<span class="tok-type">String<\/span> <span class="tok-fn">name<\/span>\(\)/);
+const javaHighlights = {
+  'A.java': [
+    [['com', '/* opens']],
+    [['com', '   closes */'], [null, ' '], ['kw', 'int'], [null, ' count = '], ['num', '1'], [null, ';']],
+    [['com', '   closes */'], [null, ' '], ['kw', 'long'], [null, ' count = '], ['num', '1'], [null, ';']],
+    [['ann', '@Override'], [null, ' '], ['kw', 'public'], [null, ' String '], ['fn', 'name'], [null, '() { '],
+      ['kw', 'return'], [null, ' '], ['str', '"a"'], [null, '; } '], ['com', '// done']],
+  ],
+};
+
+test('rows render the renderer\'s syntax tokens in order', () => {
+  const rendered = context.renderDiff(javaDiff, ['A.java'], javaHighlights);
+  assert.match(rendered, /<span class="tok-com">\/\* opens<\/span>/);
+  assert.match(rendered, /<span class="tok-ann">@Override<\/span> <span class="tok-kw">public<\/span> String <span class="tok-fn">name<\/span>/);
   assert.match(rendered, /<span class="tok-str">&quot;a&quot;<\/span>/);
   assert.match(rendered, /<span class="tok-com">\/\/ done<\/span>/);
-  assert.match(rendered, /<span class="tok-num">1<\/span>/);
 });
 
-test('files without a known language render as plain text', () => {
-  const rendered = context.renderDiff(diff, files);
-  assert.doesNotMatch(rendered, /class="tok-/);
+test('files without tokens render as plain text, and unsafe token kinds are ignored', () => {
+  assert.doesNotMatch(context.renderDiff(diff, files), /class="tok-/);
+  const hostile = { 'A.java': [[['kw" onclick="x', '/* opens']]] };
+  const rendered = context.renderDiff(javaDiff, ['A.java'], hostile);
+  assert.doesNotMatch(rendered, /onclick/);
+  assert.match(rendered, /<span class="line-content">\/\* opens<\/span>/);
 });
 
 test('paired changed lines highlight only the words that differ', () => {
-  const rendered = context.renderDiff(javaDiff, ['A.java']);
+  const rendered = context.renderDiff(javaDiff, ['A.java'], javaHighlights);
   assert.match(rendered, /<span class="diff-word"><span class="tok-kw">int<\/span><\/span>/);
   assert.match(rendered, /<span class="diff-word"><span class="tok-kw">long<\/span><\/span>/);
   assert.equal((rendered.match(/class="diff-word"/g) || []).length, 2);

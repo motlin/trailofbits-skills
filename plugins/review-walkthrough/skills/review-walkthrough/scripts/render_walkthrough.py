@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["pygments>=2.19"]
 # ///
 """Validate a walkthrough against a captured Git patch and render standalone HTML."""
 
@@ -14,8 +14,145 @@ import tempfile
 from collections import Counter
 from pathlib import Path
 
+from pygments.lexer import RegexLexer, words
+from pygments.lexers import get_lexer_by_name, get_lexer_for_filename
+from pygments.token import (
+    Comment,
+    Keyword,
+    Name,
+    Number,
+    Operator,
+    Punctuation,
+    String,
+    Text,
+    Whitespace,
+)
+from pygments.util import ClassNotFound
+
 HUNK = re.compile(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 TEMPLATE = Path(__file__).resolve().parent.parent / "template.html"
+
+# Pygments token types mapped to the page's GitHub dark color classes. Order matters: the first
+# matching ancestor wins, so the specific types (constants, decorators) precede their parents.
+TOKEN_CLASSES = (
+    (Comment, "com"),
+    (String, "str"),
+    (Number, "num"),
+    (Keyword.Constant, "num"),
+    (Keyword, "kw"),
+    (Operator.Word, "kw"),
+    (Name.Decorator, "ann"),
+    (Name.Tag, "tag"),
+    (Name.Attribute, "attr"),
+    (Name.Function, "fn"),
+    (Name.Class, "type"),
+    (Name.Builtin, "num"),
+    (Name.Constant, "num"),
+    (Name.Entity, "attr"),
+)
+
+# File extensions that Pygments does not map, or maps less usefully, by filename.
+LEXER_ALIASES = {
+    ".jsonc": "json5",
+    ".g4": "antlr",
+    ".ddl": "sql",
+    ".fk": "sql",
+    ".idx": "sql",
+}
+
+
+class KlassLexer(RegexLexer):
+    """Lexer for the Klass modeling language, which Pygments does not know."""
+
+    name = "Klass"
+    aliases = ["klass"]
+    filenames = ["*.klass"]
+    tokens = {
+        "root": [
+            (r"\s+", Whitespace),
+            (r"//.*?$", Comment.Single),
+            (r"/\*", Comment.Multiline, "comment"),
+            (r'"(\\\\|\\"|[^"])*"', String.Double),
+            (r"'(\\\\|\\'|[^'])*'", String.Single),
+            (r"\d+(\.\d+)?", Number),
+            (words(("true", "false", "null"), suffix=r"\b"), Keyword.Constant),
+            (
+                words(
+                    (
+                        "package",
+                        "class",
+                        "interface",
+                        "enumeration",
+                        "association",
+                        "projection",
+                        "service",
+                        "on",
+                        "relationship",
+                        "multiplicity",
+                        "criteria",
+                        "orderBy",
+                        "ascending",
+                        "descending",
+                        "authorize",
+                        "validate",
+                        "conflict",
+                        "version",
+                        "GET",
+                        "POST",
+                        "PUT",
+                        "PATCH",
+                        "DELETE",
+                        "key",
+                        "id",
+                        "userId",
+                        "audit",
+                        "valid",
+                        "system",
+                        "temporal",
+                        "temporalRange",
+                        "temporalInstant",
+                        "transient",
+                        "abstract",
+                        "inherits",
+                        "implements",
+                        "extends",
+                        "final",
+                        "private",
+                        "owned",
+                        "derived",
+                        "native",
+                        "this",
+                        "createdBy",
+                        "createdOn",
+                        "lastUpdatedBy",
+                        "systemFrom",
+                        "systemTo",
+                        "validFrom",
+                        "validTo",
+                        "optimisticallyLocked",
+                        "digest",
+                        "digested",
+                        "objectStorage",
+                        "count",
+                        "one",
+                        "many",
+                    ),
+                    suffix=r"\b",
+                ),
+                Keyword,
+            ),
+            (r"[A-Z]\w*", Name.Class),
+            (r"[a-zA-Z_]\w*", Name),
+            (r"[{}()\[\];:,.]", Punctuation),
+            (r"[=<>!&|+\-*/%?]+", Operator),
+            (r".", Text),
+        ],
+        "comment": [
+            (r"[^*]+", Comment.Multiline),
+            (r"\*/", Comment.Multiline, "#pop"),
+            (r"\*", Comment.Multiline),
+        ],
+    }
 
 
 def read_text(path):
@@ -28,6 +165,84 @@ def text_field(value, key, context):
     if not isinstance(result, str) or not result.strip():
         raise ValueError(f"{context}.{key} must be a nonempty string")
     return result
+
+
+def lexer_for(path):
+    """Pick a Pygments lexer for a file, or None when the file should stay plain text."""
+    # Velocity templates are named after the file they generate, e.g. pom.xml.vm.
+    name = path.rsplit("/", 1)[-1].removesuffix(".vm")
+    suffix = name[name.rfind(".") :] if "." in name else ""
+    options = {"stripnl": False, "stripall": False, "ensurenl": False, "tabsize": 0}
+    if suffix == ".klass":
+        return KlassLexer(**options)
+    try:
+        if suffix in LEXER_ALIASES:
+            return get_lexer_by_name(LEXER_ALIASES[suffix], **options)
+        return get_lexer_for_filename(name, **options)
+    except ClassNotFound:
+        return None
+
+
+def token_class(token_type):
+    for parent, css_class in TOKEN_CLASSES:
+        if token_type in parent:
+            return css_class
+    return None
+
+
+def lex_lines(lexer, lines):
+    """Lex lines as one block so multi-line constructs keep their state, then split per line."""
+    rows = [[]]
+    for token_type, value in lexer.get_tokens("\n".join(lines) + "\n"):
+        css_class = token_class(token_type)
+        for index, piece in enumerate(value.split("\n")):
+            if index:
+                rows.append([])
+            if not piece:
+                continue
+            row = rows[-1]
+            if row and row[-1][0] == css_class:
+                row[-1][1] += piece
+            else:
+                row.append([css_class, piece])
+    return rows[: len(lines)]
+
+
+def highlight_rows(block, path):
+    """Return syntax tokens for each displayed line of one file's diff, in display order.
+
+    Each hunk is lexed twice: its old side (context and deleted lines) and its new side (context
+    and added lines), so comments and strings that span lines are colored the way they appear in
+    each version of the file. Returns None when no lexer fits the file.
+    """
+    lexer = lexer_for(path)
+    if lexer is None:
+        return None
+    hunks = []
+    for line in block.split("\n"):
+        if HUNK.match(line):
+            hunks.append([])
+        elif hunks and line[:1] in ("+", "-", " "):
+            hunks[-1].append((line[0], line[1:]))
+    rows = []
+    for hunk in hunks:
+        old = lex_lines(lexer, [text for sign, text in hunk if sign != "+"])
+        new = lex_lines(lexer, [text for sign, text in hunk if sign != "-"])
+        old_index = new_index = 0
+        for sign, text in hunk:
+            if sign == "-":
+                tokens = old[old_index]
+                old_index += 1
+            else:
+                tokens = new[new_index]
+                new_index += 1
+                if sign == " ":
+                    old_index += 1
+            # Lexers that rewrite text would misalign the display; fall back to plain text.
+            if "".join(piece for _, piece in tokens) != text:
+                tokens = [[None, text]] if text else []
+            rows.append(tokens)
+    return rows
 
 
 def split_diff(patch):
@@ -194,6 +409,10 @@ def normalize_data(data, patch):
                 "message": text_field(step, "message", context),
                 "files": step_paths,
                 "diff": diff,
+                "highlights": {
+                    path: highlight_rows(block, path)
+                    for path, block in zip(step_paths, step_blocks, strict=True)
+                },
             }
         )
         files = {originals[block]: diff_lines(block) for block in step_blocks}
