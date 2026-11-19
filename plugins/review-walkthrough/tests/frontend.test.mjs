@@ -144,3 +144,23 @@ test('file headers show change counts and keep mode and rename metadata but hide
   assert.match(rendered, /<span class="line-num-old">1<\/span><span class="line-num">/);
 });
 
+test('review drafts are keyed by the review contents so only the same review restores them', () => {
+  const key = context.reviewDraftKey(data.STEPS, data.PR_META);
+  assert.match(key, /^review-walkthrough-draft:[0-9a-f]{8}$/);
+  assert.equal(context.reviewDraftKey(data.STEPS, data.PR_META), key);
+  assert.notEqual(context.reviewDraftKey(data.STEPS, { ...data.PR_META, head_sha: 'b'.repeat(40) }), key);
+});
+
+test('restored drafts drop comments that no longer fit the review', () => {
+  const valid = { file: 'both.txt', startLine: null, endLine: 1, side: 'LEFT', startSide: 'LEFT', body: 'Keep', stepIndex: 0 };
+  const restored = context.restorableComments([
+    valid,
+    { ...valid, file: 'missing.txt' },
+    { ...valid, stepIndex: 3 },
+    { ...valid, side: 'MIDDLE' },
+    { ...valid, endLine: '1' },
+    null,
+  ], data.STEPS);
+  assert.deepEqual(JSON.parse(JSON.stringify(restored)), [valid]);
+  assert.deepEqual(JSON.parse(JSON.stringify(context.restorableComments('nope', data.STEPS))), []);
+});

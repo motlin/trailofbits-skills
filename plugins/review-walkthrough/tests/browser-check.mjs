@@ -261,6 +261,34 @@ async function browserChecks() {
   });
 
   await new Promise(resolve => setTimeout(resolve, 100));
+  check('pending comments, summary and action survive a reload', () => {
+    const key = reviewDraftKey(STEPS, PR_META);
+    const summary = document.getElementById('reviewBody');
+    const action = document.getElementById('reviewEvent');
+    const savedComments = pendingComments.slice();
+    const savedSummary = summary.value;
+    pendingComments = [{ file: 'both.txt', startLine: null, endLine: 1, side: 'LEFT', startSide: 'LEFT', body: 'Persist me', stepIndex: 0 }];
+    summary.value = 'Draft summary';
+    action.value = 'REQUEST_CHANGES';
+    saveReviewDraft();
+    truth(localStorage.getItem(key), 'Draft was not saved');
+    pendingComments = [];
+    summary.value = '';
+    action.value = 'COMMENT';
+    loadReviewDraft();
+    equal(pendingComments.length, 1);
+    equal(pendingComments[0].body, 'Persist me');
+    equal(summary.value, 'Draft summary');
+    equal(action.value, 'REQUEST_CHANGES');
+    pendingComments = [];
+    summary.value = '';
+    saveReviewDraft();
+    equal(localStorage.getItem(key), null);
+    pendingComments = savedComments;
+    summary.value = savedSummary;
+    action.value = 'COMMENT';
+  });
+
   check('sanitized fragments never execute after browser events', () => equal(window.testExecuted, false));
   const output = document.createElement('output');
   output.id = 'frontend-results';

@@ -922,6 +922,79 @@ let pendingComments = [];
 let selectionStart = null; // {el, file, line, side}
 let commentFormEl = null;
 
+// Pending comments and the review summary exist only in this page, so a reload used to discard
+// them. Keep a draft in localStorage, keyed by a hash of the review's steps and PR, so reloading
+// or re-rendering the same review restores it and a different review never inherits it.
+const DRAFT_STORAGE_PREFIX = 'review-walkthrough-draft:';
+
+function hashString(text) {
+  // 32-bit FNV-1a; collisions only matter between reviews opened in the same browser.
+  var hash = 0x811c9dc5;
+  for (var i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, '0');
+}
+
+function reviewDraftKey(steps, prMeta) {
+  return DRAFT_STORAGE_PREFIX + hashString(JSON.stringify([steps, prMeta]));
+}
+
+function restorableComments(stored, steps) {
+  // Keep only well-formed comments that still point at a file and step in this review.
+  if (!Array.isArray(stored)) return [];
+  return stored.filter(function(c) {
+    return c && typeof c === 'object'
+      && typeof c.file === 'string' && typeof c.body === 'string'
+      && Number.isInteger(c.endLine) && (c.side === 'LEFT' || c.side === 'RIGHT')
+      && Number.isInteger(c.stepIndex) && steps[c.stepIndex]
+      && steps[c.stepIndex].files.indexOf(c.file) !== -1;
+  });
+}
+
+function draftStorage() {
+  // Storage can be missing or throw (private windows, blocked site data); drafts are then best effort.
+  try {
+    return window.localStorage;
+  } catch (e) {
+    return null;
+  }
+}
+
+function saveReviewDraft() {
+  var storage = draftStorage();
+  if (!storage) return;
+  var key = reviewDraftKey(STEPS, PR_META);
+  var summary = document.getElementById('reviewBody').value;
+  var event = document.getElementById('reviewEvent').value;
+  try {
+    if (pendingComments.length === 0 && !summary.trim()) {
+      storage.removeItem(key);
+    } else {
+      storage.setItem(key, JSON.stringify({comments: pendingComments, summary: summary, event: event}));
+    }
+  } catch (e) {
+    // Quota or access errors leave the in-page draft intact.
+  }
+}
+
+function loadReviewDraft() {
+  var storage = draftStorage();
+  if (!storage) return;
+  var draft;
+  try {
+    draft = JSON.parse(storage.getItem(reviewDraftKey(STEPS, PR_META)) || 'null');
+  } catch (e) {
+    return;
+  }
+  if (!draft || typeof draft !== 'object') return;
+  pendingComments = restorableComments(draft.comments, STEPS);
+  if (typeof draft.summary === 'string') document.getElementById('reviewBody').value = draft.summary;
+  if (['COMMENT', 'APPROVE', 'REQUEST_CHANGES'].indexOf(draft.event) !== -1) {
+    document.getElementById('reviewEvent').value = draft.event;
+  }
+}
 
 function escape(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -1445,6 +1518,7 @@ function editInlineComment(idx, btn) {
     var newText = textarea.value.trim();
     if (newText) {
       pendingComments[idx].body = newText;
+      saveReviewDraft();
     }
     cleanup();
     renderInlineComments();
@@ -1673,6 +1747,7 @@ function submitComment() {
     body: body,
     stepIndex: current
   });
+  saveReviewDraft();
 
   closeCommentForm();
   renderCommentMarkers();
@@ -1683,6 +1758,7 @@ function submitComment() {
 
 function removeComment(idx) {
   pendingComments.splice(idx, 1);
+  saveReviewDraft();
   updateReviewButtons();
   renderCommentMarkers();
   renderInlineComments();
@@ -1865,6 +1941,7 @@ function convertReviewToComment(stepIdx, reviewIdx) {
     stepIndex: stepIdx,
     reviewIndex: reviewIdx
   });
+  saveReviewDraft();
 
   renderCommentMarkers();
   renderInlineComments();
@@ -2211,6 +2288,8 @@ document.addEventListener('mouseup', function(e) {
 // Update command preview when review options change
 document.getElementById('reviewEvent').addEventListener('change', updateCommandBox);
 document.getElementById('reviewBody').addEventListener('input', updateCommandBox);
+document.getElementById('reviewEvent').addEventListener('change', saveReviewDraft);
+document.getElementById('reviewBody').addEventListener('input', saveReviewDraft);
 
 // --- Keyboard navigation ---
 
@@ -2227,9 +2306,17 @@ document.addEventListener('keydown', function(e) {
 if (PR_META) {
   document.getElementById('diffPane').classList.add('commenting-enabled');
   document.getElementById('topTabComments').style.display = '';
+  loadReviewDraft();
 }
 
 render();
+
+if (PR_META && pendingComments.length > 0) {
+  // Show comments restored from a saved draft in the Comments tab and command box.
+  updateReviewButtons();
+  renderCommentsTab();
+  updateCommandBox();
+}
 </script>
 </body>
 </html>

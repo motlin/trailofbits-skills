@@ -118,4 +118,8 @@ available, and tell the user its path. In a headless run, report the file withou
 opening it. When PR metadata is present, the page lets the user copy a `gh api`
 command for their selected comments. It does not execute the command or post
 anything to GitHub. Comment and Request Changes require a review summary before
-the command can be copied; the summary is optional for Approve.
+the command can be copied; the summary is optional for Approve. Pending comments,
+the summary, and the review action are saved as a draft in the browser's local
+storage, keyed by the review's steps and PR metadata, so reloading the page or
+re-rendering the same review restores them; a review with a different diff or head
+starts empty.
